@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameState } from '@/composables/useGameState'
+import ScoreReplay from './ScoreReplay.vue'
 
 const router = useRouter()
 const { state, restartGame, returnToStart } = useGameState()
@@ -108,6 +109,8 @@ const handleHome = () => {
             </div>
           </div>
         </div>
+
+        <ScoreReplay :events="state.scoreEvents" />
 
         <div v-if="state.birds.filter(b => !b.isDead && b.stage === 'adult').length > 0" class="mb-6">
           <div class="text-white/60 text-sm text-center mb-3">💐 那些陪伴过你的鸟儿们</div>

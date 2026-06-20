@@ -55,6 +55,7 @@ export interface GameState {
   maxBreedingRounds: number
   eventLog: { id: string; message: string; type: string; timestamp: number }[]
   score?: GameScore
+  scoreEvents: ScoreEvent[]
   selectedBirdId?: string
 }
 
@@ -66,6 +67,25 @@ export interface GameScore {
   personalityBonus: number
   stars: number
   rank: string
+}
+
+export type ScoreEventCategory = 'hatch' | 'death' | 'feed' | 'weather' | 'breed' | 'growth' | 'sick' | 'calm'
+
+export interface ScoreEvent {
+  id: string
+  day: number
+  timestamp: number
+  category: ScoreEventCategory
+  message: string
+  birdId?: string
+  birdName?: string
+  snapshot: {
+    survivalRate: number
+    avgHealth: number
+    breedingBonus: number
+    personalityBonus: number
+    totalScore: number
+  }
 }
 
 export interface WeatherEffect {

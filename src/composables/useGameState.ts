@@ -1,5 +1,5 @@
 import { reactive, computed, watch } from 'vue'
-import type { GameState, Bird, Berry, GrowthStage, Personality, BerryType, Weather, GameScore } from '@/types/game'
+import type { GameState, Bird, Berry, GrowthStage, Personality, BerryType, Weather, GameScore, ScoreEventCategory, ScoreEvent } from '@/types/game'
 import {
   ATTR_MIN, ATTR_MAX, DEATH_THRESHOLD,
   STAGE_DURATION, FOOD_NEED_MULTIPLIER,
@@ -26,6 +26,7 @@ const createInitialState = (): GameState => ({
   breedingCount: 0,
   maxBreedingRounds: MAX_BREEDING_ROUNDS,
   eventLog: [],
+  scoreEvents: [],
 })
 
 const state = reactive<GameState>(createInitialState())
@@ -87,6 +88,47 @@ const addEventLog = (message: string, type: string = 'info') => {
     timestamp: Date.now(),
   })
   if (state.eventLog.length > 50) state.eventLog.pop()
+}
+
+const computeScoreSnapshot = () => {
+  const totalBirds = state.totalHatched
+  const survived = state.birds.filter(b => !b.isDead).length + state.totalDied
+  const survivalRate = totalBirds > 0 ? (survived - state.totalDied) / totalBirds : 0
+  const aliveBirds = state.birds.filter(b => !b.isDead)
+  const avgHealth = aliveBirds.length > 0
+    ? aliveBirds.reduce((s, b) => s + b.health, 0) / aliveBirds.length
+    : 0
+  const breedingBonus = state.breedingCount * 20
+  const personalityBonus = aliveBirds.length > 0
+    ? aliveBirds.reduce((s, b) => s + (b.feedingCount > 10 ? 5 : 2), 0)
+    : 0
+  const totalScore = Math.round(
+    survivalRate * 40 +
+    avgHealth * 0.3 +
+    breedingBonus +
+    personalityBonus
+  )
+  return {
+    survivalRate: Math.round(survivalRate * 100),
+    avgHealth: Math.round(avgHealth),
+    breedingBonus,
+    personalityBonus,
+    totalScore: clamp(totalScore, 0, 100),
+  }
+}
+
+const addScoreEvent = (category: ScoreEventCategory, message: string, birdId?: string, birdName?: string) => {
+  state.scoreEvents.push({
+    id: generateId(),
+    day: state.day,
+    timestamp: Date.now(),
+    category,
+    message,
+    birdId,
+    birdName,
+    snapshot: computeScoreSnapshot(),
+  })
+  if (state.scoreEvents.length > 200) state.scoreEvents.shift()
 }
 
 const startGame = () => {
@@ -213,6 +255,7 @@ const updateBird = (bird: Bird, deltaMs: number, weatherEffect: ReturnType<typeo
       bird.isSick = true
       bird.sickUntil = Date.now() + randomInt(10000, 25000)
       addEventLog(`🤒 ${bird.name} 生病了，需要好好照顾！`, 'warning')
+      addScoreEvent('sick', `${bird.name} 生病了`, bird.id, bird.name)
     }
   }
 
@@ -252,6 +295,7 @@ const hatchBird = (bird: Bird) => {
   state.totalHatched++
 
   addEventLog(`🥳 ${bird.name} 破壳啦！性格：${bird.personality}`, 'success')
+  addScoreEvent('hatch', `${bird.name} 破壳了，性格：${bird.personality}`, bird.id, bird.name)
 }
 
 const growBird = (bird: Bird) => {
@@ -263,6 +307,7 @@ const growBird = (bird: Bird) => {
   bird.justGrew = true
 
   addEventLog(`🌟 ${bird.name} 成长为${bird.stage}啦！`, 'success')
+  addScoreEvent('growth', `${bird.name} 成长为${bird.stage}`, bird.id, bird.name)
 
   if (bird.stage === 'adult') {
     checkAllAdult()
@@ -273,6 +318,7 @@ const killBird = (bird: Bird) => {
   bird.isDead = true
   state.totalDied++
   addEventLog(`💔 ${bird.name} 离开了我们...`, 'danger')
+  addScoreEvent('death', `${bird.name} 离开了我们...`, bird.id, bird.name)
 
   state.birds.filter(b => !b.isDead && b.stage !== 'egg').forEach(survivor => {
     survivor.fear = clamp(survivor.fear + randomInt(15, 30), ATTR_MIN, ATTR_MAX)
@@ -301,6 +347,7 @@ const changeWeather = () => {
   state.currentWeather = newWeather
   state.nextWeatherChangeAt = Date.now() + WEATHER_CHANGE_INTERVAL + randomInt(-10000, 10000)
   addEventLog(`🌤️ 天气变化：${newWeather}`, 'info')
+  addScoreEvent('weather', `天气变为 ${newWeather}`)
 }
 
 const spawnBerry = () => {
@@ -348,6 +395,7 @@ const feedBird = (birdId: string, amount: number): boolean => {
     bird.fear = clamp(bird.fear - fearReduce, ATTR_MIN, ATTR_MAX)
   }
 
+  addScoreEvent('feed', `喂食 ${bird.name} +${amount}`, bird.id, bird.name)
   return true
 }
 
@@ -356,6 +404,7 @@ const calmBird = (birdId: string): boolean => {
   if (!bird || bird.isDead || bird.isAway || bird.stage === 'egg') return false
 
   bird.fear = clamp(bird.fear - randomInt(8, 15), ATTR_MIN, ATTR_MAX)
+  addScoreEvent('calm', `安抚 ${bird.name}`, bird.id, bird.name)
   return true
 }
 
@@ -398,6 +447,7 @@ const keepAndBreed = () => {
   }
 
   addEventLog(`💝 成鸟们产下了 ${newEggCount} 颗新蛋！第 ${state.breedingCount} 窝`, 'success')
+  addScoreEvent('breed', `第 ${state.breedingCount} 窝繁殖，产下 ${newEggCount} 颗蛋`)
   state.phase = 'playing'
 }
 
